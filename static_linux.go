@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"syscall"
 
 	netlink "github.com/vishvananda/netlink"
 )
@@ -33,6 +34,26 @@ func (c *Client) configureStatic(name string, cfg StaticConfig) error {
 	if err != nil {
 		return err
 	}
+	family := netlink.FAMILY_V4
+	if address.IP.To4() == nil {
+		family = netlink.FAMILY_V6
+	}
+	if cfg.FlushAddresses {
+		addresses, err := c.handle.AddrList(link, family)
+		if err != nil {
+			return fmt.Errorf("list addresses on %q before flushing: %w", name, err)
+		}
+		for i := range addresses {
+			oldAddress := &addresses[i]
+			if family == netlink.FAMILY_V6 && oldAddress.IP.IsLinkLocalUnicast() {
+				continue
+			}
+			// Removing a primary IPv4 address can also remove its secondaries.
+			if err := c.handle.AddrDel(link, oldAddress); err != nil && !errors.Is(err, syscall.EADDRNOTAVAIL) {
+				return fmt.Errorf("remove address %s on %q: %w", oldAddress.IPNet, name, err)
+			}
+		}
+	}
 	if err := c.handle.AddrReplace(link, &netlink.Addr{
 		IPNet:     address,
 		LinkIndex: link.Attrs().Index,
@@ -47,12 +68,9 @@ func (c *Client) configureStatic(name string, cfg StaticConfig) error {
 		LinkIndex: link.Attrs().Index,
 		Dst:       nil,
 		Gw:        cloneIP(gateway),
-		Family:    netlink.FAMILY_V4,
+		Family:    family,
 		Scope:     netlink.SCOPE_UNIVERSE,
 		Priority:  cfg.Metric,
-	}
-	if address.IP.To4() == nil {
-		route.Family = netlink.FAMILY_V6
 	}
 	if err := c.handle.RouteReplace(route); err != nil {
 		return fmt.Errorf("replace default route on %q: %w", name, err)

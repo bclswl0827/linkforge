@@ -7,9 +7,6 @@ import (
 	"flag"
 	"log"
 	"net"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/bclswl0827/linkforge"
 )
@@ -19,6 +16,7 @@ func main() {
 	cidr := flag.String("address", "192.0.2.10/24", "IP address in CIDR notation")
 	gateway := flag.String("gateway", "", "optional default gateway")
 	metric := flag.Int("metric", 100, "default route metric")
+	flush := flag.Bool("flush", false, "remove existing addresses of the same family, preserving IPv6 link-local addresses")
 	flag.Parse()
 
 	ip, network, err := net.ParseCIDR(*cidr)
@@ -48,16 +46,14 @@ func main() {
 		Interface: *name,
 		Mode:      linkforge.ModeStatic,
 		Static: linkforge.StaticConfig{
-			Address: network,
-			Gateway: gatewayIP,
-			Metric:  *metric,
+			Address:        network,
+			Gateway:        gatewayIP,
+			Metric:         *metric,
+			FlushAddresses: *flush,
 		},
 	}); err != nil {
 		log.Fatal(err)
 	}
 
 	log.Printf("configured %s with %s", *name, network)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	<-ctx.Done()
 }

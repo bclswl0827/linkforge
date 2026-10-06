@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	netlink "github.com/vishvananda/netlink"
@@ -30,12 +31,17 @@ const (
 )
 
 // StaticConfig describes the address and optional default route to install.
-// The interface should have one configuration owner. Existing addresses and
-// routes are not flushed, but a matching default route may be replaced.
+// The interface should have one configuration owner. Existing addresses are
+// preserved unless FlushAddresses is true. Routes are not explicitly flushed,
+// but a matching default route may be replaced.
 type StaticConfig struct {
 	Address *net.IPNet
 	Gateway net.IP
 	Metric  int
+	// FlushAddresses removes existing addresses of the same family before
+	// installing Address, preserving IPv6 link-local addresses. Removal is
+	// not rolled back if configuration fails.
+	FlushAddresses bool
 }
 
 // DHCPConfig controls the DHCP exchange and the default route installed
@@ -93,7 +99,9 @@ type Client struct {
 
 // New creates a client with a dedicated rtnetlink handle.
 func New() (*Client, error) {
-	h, err := netlink.NewHandle()
+	// Only routing netlink is needed. Opening all families also requires
+	// IPsec and Netfilter support, which minimal kernels may omit.
+	h, err := netlink.NewHandle(syscall.NETLINK_ROUTE)
 	if err != nil {
 		return nil, fmt.Errorf("open rtnetlink handle: %w", err)
 	}

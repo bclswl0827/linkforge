@@ -12,6 +12,7 @@ go run ./examples/dhcp -interface eth0 -wait
 go run ./examples/dhcp -interface eth0 -family 6 -wait
 sudo go run ./examples/dhcp -interface eth0 -family 6 -write-dns -wait
 go run ./examples/static -interface eth0 -address 192.0.2.10/24 -gateway 192.0.2.1
+go run ./examples/static -interface eth0 -address 192.0.2.10/24 -gateway 192.0.2.1 -flush
 go run ./examples/static -interface eth0 -address 2001:db8::10/64 -gateway 2001:db8::1
 go run ./examples/link -interface eth0 -up
 go run ./examples/link -interface eth0 -down
@@ -23,8 +24,17 @@ go run ./examples/inspect
 Use `-write-dns` to replace `/etc/resolv.conf` with the learned DNS servers, or
 combine it with `-dns-path /path/to/resolv.conf` to select another file. The
 original file content is restored when the last session using that path stops.
-`static` configures an IPv4 or IPv6 address and optional default route. For
-DHCPv6, the default gateway and additional DNS servers are learned from Router
+`static` configures an IPv4 or IPv6 address and optional default route, then
+exits, leaving the configuration installed. Existing addresses are preserved by
+default. Use `-flush` (`StaticConfig.FlushAddresses` in the library) to remove
+existing addresses of the same family before installing the new address.
+IPv6 link-local addresses and addresses of the other family are preserved.
+Removing addresses can interrupt existing connections and remove associated
+kernel routes; removed addresses are not restored if configuration fails.
+BusyBox `ifconfig` may only show the primary IPv4 address; use
+`ip addr show dev eth0` or the `inspect` example to list all addresses.
+
+For DHCPv6, the default gateway and additional DNS servers are learned from Router
 Advertisements. `link` demonstrates administrative up/down operations.
 `inspect` uses `Client.Netlink()` to access the underlying
 `vishvananda/netlink` handle and list links, addresses and routes.
